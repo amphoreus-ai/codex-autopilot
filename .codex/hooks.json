@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/eternal_recurrence.py\""
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/eternal-recurrence.mjs\""
           }
         ]
       }

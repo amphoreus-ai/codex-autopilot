@@ -1,0 +1,36 @@
+{
+  "name": "agent-eternal",
+  "version": "0.1.0",
+  "description": "Trap Codex in an eternal recurrence of execution until absolute completion is sworn.",
+  "license": "MIT",
+  "author": "Zijian Zhang",
+  "type": "module",
+  "bin": {
+    "agent-eternal": "bin/main.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    ".codex/hooks/eternal-recurrence.mjs"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "prepublishOnly": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/futrime/codex-eternal-recurrence.git"
+  },
+  "bugs": {
+    "url": "https://github.com/futrime/codex-eternal-recurrence/issues"
+  },
+  "homepage": "https://github.com/futrime/codex-eternal-recurrence#readme",
+  "keywords": [
+    "codex",
+    "cli",
+    "hook"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
