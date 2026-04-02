@@ -3,6 +3,7 @@
 import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
+import { parseTOML, stringifyTOML } from "confbox";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -34,6 +35,10 @@ function hasHookCommand(value) {
   return Object.values(value).some(hasHookCommand);
 }
 
+function hasFeatureSubset(targetFeatures, sourceFeatures) {
+  return Object.entries(sourceFeatures).every(([key, value]) => targetFeatures[key] === value);
+}
+
 async function isInstalled() {
   if (!(await exists(hookScriptPath)) || !(await exists(configPath)) || !(await exists(hooksJsonPath))) {
     return false;
@@ -45,7 +50,10 @@ async function isInstalled() {
     readFile(hooksJsonPath, "utf8"),
   ]);
 
-  return targetConfig.includes(sourceConfig.trim()) && hasHookCommand(JSON.parse(targetHooksJson));
+  const sourceFeatures = parseTOML(sourceConfig).features ?? {};
+  const targetFeatures = parseTOML(targetConfig).features ?? {};
+
+  return hasFeatureSubset(targetFeatures, sourceFeatures) && hasHookCommand(JSON.parse(targetHooksJson));
 }
 
 async function install() {
@@ -59,8 +67,13 @@ async function install() {
   const sourceConfig = await readFile(sourceConfigPath, "utf8");
   if (await exists(configPath)) {
     const targetConfig = await readFile(configPath, "utf8");
-    if (!targetConfig.includes(sourceConfig.trim())) {
-      await writeFile(configPath, `${targetConfig.replace(/\s*$/, "\n\n")}${sourceConfig}`);
+    const targetConfigValue = parseTOML(targetConfig);
+    const sourceFeatures = parseTOML(sourceConfig).features ?? {};
+    const targetFeatures = targetConfigValue.features ?? {};
+
+    if (!hasFeatureSubset(targetFeatures, sourceFeatures)) {
+      targetConfigValue.features = { ...targetFeatures, ...sourceFeatures };
+      await writeFile(configPath, `${stringifyTOML(targetConfigValue).trimEnd()}\n`);
     }
   } else {
     await copyFile(sourceConfigPath, configPath);

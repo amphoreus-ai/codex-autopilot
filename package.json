@@ -2,6 +2,9 @@
   "name": "codex-eternal-recurrence",
   "version": "0.1.0",
   "type": "module",
+  "dependencies": {
+    "confbox": "^0.2.2"
+  },
   "bin": {
     "codex-eternal-recurrence": "bin/main.js"
   }
