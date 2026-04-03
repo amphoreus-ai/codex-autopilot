@@ -1,11 +1,16 @@
 #!/bin/sh
 
-PHRASE_1='I ABSOLUTELY CONFIRM THAT ALL TASKS ARE COMPLETE AND ALL GOALS HAVE BEEN ACHIEVED, BECAUSE'
-PHRASE_2='I ABSOLUTELY CONFIRM THAT IT IS IMPOSSIBLE TO COMPLETE ALL TASKS OR ACHIEVE ALL GOALS UNDER ANY CIRCUMSTANCES, BECAUSE'
-PHRASE_3='THE USER DID NOT SPECIFY ANY TASK, BECAUSE'
+PHRASE_1='I CONFIRM TASK COMPLETION: I have fully achieved all requested goals, because'
+PHRASE_2='I CONFIRM TASK FAILURE: I tried multiple approaches (at least 5 times), but cannot complete it due to objective constraints, because'
+PHRASE_3='NO TASK: The user did not ask for a task to be completed, because'
+PHRASE_4='TASK SUSPENDED: The task is still in progress, but I need user feedback, authorization, or more information to continue, because'
 
 allowed_phrases_text() {
-  printf '%s' "$PHRASE_1 | $PHRASE_2 | $PHRASE_3"
+  printf '%s\n%s\n%s\n%s' \
+    "- $PHRASE_1" \
+    "- $PHRASE_2" \
+    "- $PHRASE_3" \
+    "- $PHRASE_4"
 }
 
 emit_continue() {
@@ -14,11 +19,19 @@ emit_continue() {
 
 emit_block() {
   reason=$1
-  printf '{"decision":"block","reason":"%s"}\n' "$reason"
+  if command -v jq >/dev/null 2>&1; then
+    jq -Rn --arg reason "$reason" '{"decision":"block","reason":$reason}'
+  else
+    printf '{"decision":"block","reason":"%s"}\n' "$reason"
+  fi
 }
 
 block_reason() {
-  printf '%s' "Re-check before stopping: either every requested task is perfectly complete and every goal is strictly satisfied, or completion is absolutely impossible. If more work is possible, continue. If you must stop, start your reply with exactly one of these phrases and then give a reason of at least 100 words: $(allowed_phrases_text). Do not misrepresent the state. Stop only when you can swear."
+  printf '%s' "Agent run intercepted: your reply would pause the conversation, but it did not include a valid status declaration.\n\nWhenever you decide to end the current turn, include exactly one of the following phrases in your reply:\n$(allowed_phrases_text)\n\nPlease rewrite your reply to match your actual progress."
+}
+
+yield_block_reason() {
+  printf '%s' "Let me think about it and I may have late reply; you can keep going. I trust your ability to work through the current difficulty. Review the context and error messages carefully, try different search strategies, tool calls, or code changes, and continue the task."
 }
 
 payload=$(cat)
@@ -33,6 +46,10 @@ last_message=$(printf '%s' "$payload" | jq -r 'if type == "object" then (.last_a
 case $last_message in
   *"$PHRASE_1"* | *"$PHRASE_2"* | *"$PHRASE_3"*)
     emit_continue
+    exit 0
+    ;;
+  *"$PHRASE_4"*)
+    emit_block "$(yield_block_reason)"
     exit 0
     ;;
 esac
