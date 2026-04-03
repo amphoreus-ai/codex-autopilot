@@ -57,12 +57,12 @@ async function isInstalled() {
 }
 
 async function install() {
+  await mkdir(join(targetDir, "hooks"), { recursive: true });
+  await copyFile(sourceHookScriptPath, hookScriptPath);
+
   if (await isInstalled()) {
     process.exit(0);
   }
-
-  await mkdir(join(targetDir, "hooks"), { recursive: true });
-  await copyFile(sourceHookScriptPath, hookScriptPath);
 
   const sourceConfig = await readFile(sourceConfigPath, "utf8");
   if (await exists(configPath)) {
