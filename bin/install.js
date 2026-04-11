@@ -18,13 +18,13 @@ if (resolve(srcHookDir) !== resolve(dstHookDir)) {
 }
 
 const configPath = join(dst, "config.toml");
-const config = parseTOML(readFileSync(configPath, "utf8"));
+const config = existsSync(configPath) ? parseTOML(readFileSync(configPath, "utf8")) : {};
 config.features = { ...(config.features ?? {}), codex_hooks: true };
 writeIfChanged(configPath, `${stringifyTOML(config).trimEnd()}\n`);
 
 const hooksPath = join(dst, "hooks.json");
 const sourceHooks = parseJSON(readFileSync(join(src, "hooks.json"), "utf8"));
-const targetHooks = parseJSON(readFileSync(hooksPath, "utf8"));
+const targetHooks = existsSync(hooksPath) ? parseJSON(readFileSync(hooksPath, "utf8")) : {};
 const mergedHooks = { ...targetHooks, hooks: { ...(targetHooks.hooks ?? {}) } };
 
 for (const [event, entries] of Object.entries(sourceHooks.hooks ?? {})) {
