@@ -4,8 +4,5 @@
   "type": "module",
   "bin": {
     "arar": "bin/install.js"
-  },
-  "dependencies": {
-    "confbox": "^0.2.4"
   }
 }

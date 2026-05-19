@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh .codex/hooks/codex-autopilot/autopilot.sh"
+            "command": "node .codex/hooks/arar/main.js"
           }
         ]
       }

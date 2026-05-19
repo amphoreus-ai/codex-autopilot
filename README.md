@@ -8,10 +8,10 @@ When coding agents are saying "done", it may not be really done. They may be try
 
 Prerequisites:
 
-- [Codex CLI](https://github.com/openai/codex) installed and available on PATH
-- Python available on PATH
+- [Codex CLI](https://github.com/openai/codex) installed
+- [Node.js and npm](https://nodejs.org/) installed
 
-In the project where you want autopilot enabled:
+In the project where you want arar enabled:
 
 ```bash
 npx github:futrime/arar
