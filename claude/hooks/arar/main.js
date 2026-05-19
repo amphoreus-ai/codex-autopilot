@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,9 +59,10 @@ function* walkObjects(node) {
     for (const v of Object.values(node)) yield* walkObjects(v);
 }
 
-function extractUserMessagesFromTranscript(path) {
+function parseTranscript(path) {
     const lines = readFileSync(path, "utf8").split("\n");
-    const messages = [];
+    const userMessages = [];
+    let lastAssistant = "";
     for (const line of lines) {
         if (!line) continue;
         let obj;
@@ -71,36 +72,66 @@ function extractUserMessagesFromTranscript(path) {
             continue;
         }
         for (const node of walkObjects(obj)) {
-            if (node.role !== "user") continue;
-            const text = ("content" in node ? extractText(node.content) : extractText(node)).trim();
-            if (text) messages.push(text);
+            const role = node.role ?? node.type;
+            if (role === "user") {
+                const text = extractText(node.content ?? node).trim();
+                if (text) userMessages.push(text);
+            } else if (role === "assistant") {
+                const text = extractText(node.content ?? node).trim();
+                if (text) lastAssistant = text;
+            }
         }
     }
-    if (messages.length === 0) return "";
-    return messages.map((text, index) => `User message ${index + 1}:\n${text}`).join("\n\n");
+    const userBlock = userMessages.length
+        ? userMessages.map((text, index) => `User message ${index + 1}:\n${text}`).join("\n\n")
+        : "";
+    return { userMessages: userBlock, lastAssistant };
 }
 
-function runCodex({ input, resultFile }) {
+function runClaude({ prompt, resultFile }) {
     return new Promise((resolve, reject) => {
+        const schema = readFileSync(SCHEMA_PATH, "utf8");
         const child = spawn(
-            "codex",
+            "claude",
             [
-                "exec",
-                AUDIT_PROMPT,
-                "--ephemeral",
-                "--skip-git-repo-check",
-                "--disable",
-                "hooks",
-                "--output-schema",
-                SCHEMA_PATH,
-                "-o",
-                resultFile,
+                "-p",
+                prompt,
+                "--settings",
+                '{"disableAllHooks":true}',
+                "--output-format",
+                "json",
+                "--json-schema",
+                schema,
+                "--permission-mode",
+                "auto",
             ],
-            { stdio: ["pipe", "ignore", "ignore"] },
+            { stdio: ["pipe", "pipe", "ignore"] },
         );
+        let stdout = "";
+        child.stdout.on("data", (d) => {
+            stdout += d.toString();
+        });
         child.once("error", reject);
-        child.once("close", () => resolve());
-        child.stdin.end(input);
+        child.once("close", () => {
+            try {
+                const envelope = JSON.parse(stdout);
+                let result = envelope.structured_output ?? envelope.result ?? envelope;
+                if (typeof result === "string") {
+                    try {
+                        result = JSON.parse(result);
+                    } catch {
+                        /* keep as string */
+                    }
+                }
+                if (result && typeof result === "object") {
+                    writeFileSync(resultFile, JSON.stringify(result));
+                }
+            } catch {
+                /* leave resultFile absent */
+            }
+            resolve();
+        });
+        child.stdin.end();
     });
 }
 
@@ -113,25 +144,25 @@ async function main() {
         hookInput = {};
     }
 
-    const lastAssistantMessage = hookInput.last_assistant_message ?? "";
-    if (!lastAssistantMessage) {
-        emitBlock("No assistant message found to judge. Please continue working");
-        return;
-    }
-
     const transcriptPath = hookInput.transcript_path;
     if (!transcriptPath || !existsSync(transcriptPath)) {
         emitFail("transcript_path is missing or invalid.");
         return;
     }
 
-    let userMessages = "";
+    let parsed = { userMessages: "", lastAssistant: "" };
     try {
-        userMessages = extractUserMessagesFromTranscript(transcriptPath);
+        parsed = parseTranscript(transcriptPath);
     } catch {
-        userMessages = "";
+        /* keep defaults */
     }
-    if (!userMessages) {
+
+    const lastAssistantMessage = hookInput.last_assistant_message ?? parsed.lastAssistant;
+    if (!lastAssistantMessage) {
+        emitBlock("No assistant message found to judge. Please continue working");
+        return;
+    }
+    if (!parsed.userMessages) {
         emitFail("No user messages found.");
         return;
     }
@@ -147,16 +178,16 @@ async function main() {
     };
 
     try {
-        const codexInput = `Assistant message:\n${lastAssistantMessage}\n\nAll user messages:\n${userMessages}\n`;
-        await runCodex({ input: codexInput, resultFile });
+        const fullPrompt = `${AUDIT_PROMPT}\n\nAssistant message:\n${lastAssistantMessage}\n\nAll user messages:\n${parsed.userMessages}\n`;
+        await runClaude({ prompt: fullPrompt, resultFile });
 
         let verdict = "incomplete";
         let reason = "No reason provided.";
         if (existsSync(resultFile)) {
             try {
-                const parsed = JSON.parse(readFileSync(resultFile, "utf8"));
-                if (typeof parsed.verdict === "string") verdict = parsed.verdict;
-                if (typeof parsed.reason === "string") reason = parsed.reason;
+                const parsedResult = JSON.parse(readFileSync(resultFile, "utf8"));
+                if (typeof parsedResult.verdict === "string") verdict = parsedResult.verdict;
+                if (typeof parsedResult.reason === "string") reason = parsedResult.reason;
             } catch {
                 /* keep defaults */
             }
